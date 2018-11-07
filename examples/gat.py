@@ -1,12 +1,16 @@
 from __future__ import division
+import os, sys
+sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 import numpy as np
 
-from keras.callbacks import EarlyStopping, TensorBoard
-from keras.layers import Input, Dropout
-from keras.models import Model
-from keras.optimizers import Adam
-from keras.regularizers import l2
+# Disable TensorFlow GPU for parallel execution
+if os.name == "nt":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+else:
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+from tensorflow.python import keras as K
 from keras_gat import GraphAttention
 from keras_gat.utils import load_data
 
@@ -22,24 +26,30 @@ n_attn_heads = 8              # Number of attention heads in first GAT layer
 dropout_rate = 0.6            # Dropout rate applied to the input of GAT layers
 l2_reg = 5e-4                 # Regularization rate for l2
 learning_rate = 5e-3          # Learning rate for SGD
-epochs = 2000                 # Number of epochs to run for
+epochs = 100                 # Number of epochs to run for
 es_patience = 100             # Patience fot early stopping
+
+print(X.shape)
+print(A.shape)
+print(Y_train.shape)
+
+l2 = K.regularizers.l2
 
 # Preprocessing operations
 X /= X.sum(1).reshape(-1, 1)
 A = A + np.eye(A.shape[0])  # Add self-loops
 
 # Model definition (as per Section 3.3 of the paper)
-X_in = Input(shape=(F,))
-A_in = Input(shape=(N,))
+X_in = K.layers.Input(shape=(F,))
+A_in = K.layers.Input(shape=(N,))
 
-dropout1 = Dropout(dropout_rate)(X_in)
+dropout1 = K.layers.Dropout(dropout_rate)(X_in)
 graph_attention_1 = GraphAttention(F_,
                                    attn_heads=n_attn_heads,
                                    attn_heads_reduction='concat',
                                    activation='elu',
                                    kernel_regularizer=l2(l2_reg))([dropout1, A_in])
-dropout2 = Dropout(dropout_rate)(graph_attention_1)
+dropout2 = K.layers.Dropout(dropout_rate)(graph_attention_1)
 graph_attention_2 = GraphAttention(n_classes,
                                    attn_heads=1,
                                    attn_heads_reduction='average',
@@ -47,16 +57,16 @@ graph_attention_2 = GraphAttention(n_classes,
                                    kernel_regularizer=l2(l2_reg))([dropout2, A_in])
 
 # Build model
-model = Model(inputs=[X_in, A_in], outputs=graph_attention_2)
-optimizer = Adam(lr=learning_rate)
+model = K.models.Model(inputs=[X_in, A_in], outputs=graph_attention_2)
+optimizer = K.optimizers.Adam(lr=learning_rate)
 model.compile(optimizer=optimizer,
               loss='categorical_crossentropy',
               weighted_metrics=['acc'])
 model.summary()
 
 # Callbacks
-es_callback = EarlyStopping(monitor='val_weighted_acc', patience=es_patience)
-tb_callback = TensorBoard(batch_size=N)
+es_callback = K.callbacks.EarlyStopping(monitor='val_weighted_acc', patience=es_patience)
+tb_callback = K.callbacks.TensorBoard(batch_size=N)
 
 # Train model
 validation_data = ([X, A], Y_val, idx_val)
@@ -78,3 +88,4 @@ eval_results = model.evaluate([X, A],
 print('Done.\n'
       'Test loss: {}\n'
       'Test accuracy: {}'.format(*eval_results))
+
