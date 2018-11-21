@@ -27,7 +27,7 @@ dropout_rate = 0.6            # Dropout rate applied to the input of GAT layers
 l2_reg = 5e-4                 # Regularization rate for l2
 learning_rate = 5e-3          # Learning rate for SGD
 epochs = 100                 # Number of epochs to run for
-es_patience = 100             # Patience fot early stopping
+es_patience = 200             # Patience fot early stopping
 
 print(X.shape)
 print(A.shape)
