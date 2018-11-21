@@ -26,12 +26,8 @@ n_attn_heads = 8              # Number of attention heads in first GAT layer
 dropout_rate = 0.6            # Dropout rate applied to the input of GAT layers
 l2_reg = 5e-4                 # Regularization rate for l2
 learning_rate = 5e-3          # Learning rate for SGD
-epochs = 100                 # Number of epochs to run for
-es_patience = 200             # Patience fot early stopping
-
-print(X.shape)
-print(A.shape)
-print(Y_train.shape)
+epochs = 200                  # Number of epochs to run for
+es_patience = 100             # Patience fot early stopping
 
 l2 = K.regularizers.l2
 
@@ -70,6 +66,11 @@ model.summary()
 # Callbacks
 es_callback = K.callbacks.EarlyStopping(monitor='val_weighted_acc', patience=es_patience)
 tb_callback = K.callbacks.TensorBoard(batch_size=N)
+best_model = os.path.join(os.path.dirname(__file__), "../logs/best_model.h5")
+mc_callback = K.callbacks.ModelCheckpoint(best_model,
+                                          monitor='val_weighted_acc',
+                                          save_best_only=True,
+                                          save_weights_only=True)
 
 # Train model
 validation_data = ([X, A], Y_val, idx_val)
@@ -80,10 +81,10 @@ model.fit([X, A],
           batch_size=N,
           validation_data=validation_data,
           shuffle=False,  # Shuffling data means shuffling the whole graph
-          callbacks=[es_callback, tb_callback])
+          callbacks=[es_callback, tb_callback, mc_callback])
 
 # Load best model
-model.load_weights('logs/best_model.h5')
+model.load_weights(best_model)
 
 # Evaluate model
 eval_results = model.evaluate([X, A],
