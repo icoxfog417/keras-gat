@@ -1,6 +1,10 @@
 # Keras Graph Attention Network
 This is a Keras implementation of the Graph Attention Network (GAT) model by Veličković et al. (2017, [[arXiv link]](https://arxiv.org/abs/1710.10903)).
 
+**"additive" branch changes attention to [Additive](https://arxiv.org/abs/1409.0473).**
+
+It may improves the accuracy.
+
 ## Acknowledgements
 I have no affiliation with the authors of the paper and I am implementing this code for non-commercial reasons.  
 The authors published their [reference Tensorflow implementation here](https://github.com/PetarV-/GAT), so check it out for something that is guaranteed to work as intended. Their implementation is slightly different than mine, so that may be something to keep in mind.
