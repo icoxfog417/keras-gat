@@ -3,7 +3,9 @@ This is a Keras implementation of the Graph Attention Network (GAT) model by Vel
 
 **"additive" branch changes attention to [Additive](https://arxiv.org/abs/1409.0473).**
 
-It may improves the accuracy.
+It may be more stable performance (but needs more parameters).
+
+![gat](https://user-images.githubusercontent.com/544269/48828527-4fe2e980-edb3-11e8-99a2-f9e1b0229221.PNG)
 
 ## Acknowledgements
 I have no affiliation with the authors of the paper and I am implementing this code for non-commercial reasons.  
