@@ -1,227 +1,204 @@
-<<<<<<< HEAD
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
-from tensorflow.python.keras import activations, constraints, initializers, regularizers
-from tensorflow.python.keras.layers import Layer, Dropout, LeakyReLU
-=======
-from __future__ import absolute_import
-
-from keras import activations, constraints, initializers, regularizers
-from keras import backend as K
-from keras.layers import Layer, Dropout, LeakyReLU
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
+from tensorflow.python.keras.engine.base_layer import InputSpec
+from tensorflow.python.keras import initializers, regularizers, constraints
+from tensorflow.python.keras.layers import Dense, Dropout
 
 
-class GraphAttention(Layer):
-    """
-    import from danielegrattarola/keras-gat
-    https://github.com/danielegrattarola/keras-gat/blob/master/keras_gat/graph_attention_layer.py
-    """
+class GraphAttentionLayer(Dense):
 
     def __init__(self,
-                 F_,
+                 feature_units,
                  attn_heads=1,
-<<<<<<< HEAD
                  attn_heads_reduction="concat",  # {"concat", "average"}
                  dropout_rate=0.5,
                  activation="relu",
-                 use_bias=True,
-                 kernel_initializer="glorot_uniform",
-                 bias_initializer="zeros",
                  attn_kernel_initializer="glorot_uniform",
-=======
-                 attn_heads_reduction='concat',  # {'concat', 'average'}
-                 dropout_rate=0.5,
-                 activation='relu',
-                 use_bias=True,
-                 kernel_initializer='glorot_uniform',
-                 bias_initializer='zeros',
-                 attn_kernel_initializer='glorot_uniform',
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
-                 kernel_regularizer=None,
-                 bias_regularizer=None,
                  attn_kernel_regularizer=None,
-                 activity_regularizer=None,
-                 kernel_constraint=None,
-                 bias_constraint=None,
                  attn_kernel_constraint=None,
+                 attention=True,
+                 return_attention=False,
                  **kwargs):
 
         if attn_heads_reduction not in {"concat", "average"}:
             raise ValueError("Possbile reduction methods: concat, average")
 
-        self.F_ = F_  # Number of output features (F" in the paper)
-        self.attn_heads = attn_heads  # Number of attention heads (K in the paper)
-        self.attn_heads_reduction = attn_heads_reduction  # Eq. 5 and 6 in the paper
-        self.dropout_rate = dropout_rate  # Internal dropout rate
-        self.activation = activations.get(activation)  # Eq. 4 in the paper
-        self.use_bias = use_bias
+        super(GraphAttentionLayer, self).__init__(units=feature_units,
+                                                  activation=activation,
+                                                  **kwargs)
 
-        self.kernel_initializer = initializers.get(kernel_initializer)
-        self.bias_initializer = initializers.get(bias_initializer)
-        self.attn_kernel_initializer = initializers.get(attn_kernel_initializer)
+        # Number of attention heads (K in the paper)
+        self.attn_heads = attn_heads
+        # Eq. 5 and 6 in the paper
+        self.attn_heads_reduction = attn_heads_reduction
+        # Internal dropout rate
+        self.dropout_rate = dropout_rate
 
-        self.kernel_regularizer = regularizers.get(kernel_regularizer)
-        self.bias_regularizer = regularizers.get(bias_regularizer)
-        self.attn_kernel_regularizer = regularizers.get(attn_kernel_regularizer)
-        self.activity_regularizer = regularizers.get(activity_regularizer)
-
-        self.kernel_constraint = constraints.get(kernel_constraint)
-        self.bias_constraint = constraints.get(bias_constraint)
+        self.attn_kernel_initializer \
+            = initializers.get(attn_kernel_initializer)
+        self.attn_kernel_regularizer \
+            = regularizers.get(attn_kernel_regularizer)
         self.attn_kernel_constraint = constraints.get(attn_kernel_constraint)
+        self.attention = attention
+        self.return_attention = return_attention
+        self.input_spec = [InputSpec(ndim=2), InputSpec(ndim=2)]
         self.supports_masking = False
 
         # Populated by build()
-        self.kernels = []       # Layer kernels for attention heads
-        self.biases = []        # Layer biases for attention heads
-        self.attn_kernels = []  # Attention kernels for attention heads
+        self.kernels = []
+        self.biases = []
+        self.neighbor_kernels = []
+        self.attn_kernels = []
+        self.attention_biases = []
 
         if attn_heads_reduction == "concat":
             # Output will have shape (..., K * F")
-            self.output_dim = self.F_ * self.attn_heads
+            self.output_dim = self.units * self.attn_heads
         else:
             # Output will have shape (..., F")
-            self.output_dim = self.F_
-
-        super(GraphAttention, self).__init__(**kwargs)
+            self.output_dim = self.units
 
     def build(self, input_shape):
-        assert len(input_shape) >= 2
-        F = input_shape[0][-1].value
+        X_dims, A_dims = [dims.as_list() for dims in input_shape]
+        assert len(X_dims) == 2
+        assert len(A_dims) == 2
+
+        _, F = X_dims
+        _, N = A_dims
 
         # Initialize weights for each attention head
         for head in range(self.attn_heads):
             # Layer kernel
-            kernel = self.add_weight(shape=(F, self.F_),
+            kernel = self.add_weight(shape=(F, self.units),
                                      initializer=self.kernel_initializer,
                                      regularizer=self.kernel_regularizer,
                                      constraint=self.kernel_constraint,
-<<<<<<< HEAD
                                      name="kernel_{}".format(head))
-=======
-                                     name='kernel_{}'.format(head))
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
             self.kernels.append(kernel)
 
-            # # Layer bias
+            # Layer bias
             if self.use_bias:
-                bias = self.add_weight(shape=(self.F_, ),
+                bias = self.add_weight(shape=(self.units,),
                                        initializer=self.bias_initializer,
                                        regularizer=self.bias_regularizer,
                                        constraint=self.bias_constraint,
-<<<<<<< HEAD
                                        name="bias_{}".format(head))
-=======
-                                       name='bias_{}'.format(head))
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
                 self.biases.append(bias)
 
+            if not self.attention:
+                continue
+
             # Attention kernels
-            attn_kernel_self = self.add_weight(shape=(self.F_, 1),
-                                               initializer=self.attn_kernel_initializer,
-                                               regularizer=self.attn_kernel_regularizer,
-                                               constraint=self.attn_kernel_constraint,
-<<<<<<< HEAD
-                                               name="attn_kernel_self_{}".format(head),)
-=======
-                                               name='attn_kernel_self_{}'.format(head),)
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
-            attn_kernel_neighs = self.add_weight(shape=(self.F_, 1),
-                                                 initializer=self.attn_kernel_initializer,
-                                                 regularizer=self.attn_kernel_regularizer,
-                                                 constraint=self.attn_kernel_constraint,
-<<<<<<< HEAD
-                                                 name="attn_kernel_neigh_{}".format(head))
-=======
-                                                 name='attn_kernel_neigh_{}'.format(head))
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
-            self.attn_kernels.append([attn_kernel_self, attn_kernel_neighs])
+            neighbor_kernel = self.add_weight(
+                                    shape=(F, self.units),
+                                    initializer=self.kernel_initializer,
+                                    regularizer=self.kernel_regularizer,
+                                    constraint=self.kernel_constraint,
+                                    name="kernel_neighbor_{}".format(head))
+
+            attn_kernel = self.add_weight(
+                                    shape=(self.units, 1),
+                                    initializer=self.attn_kernel_initializer,
+                                    regularizer=self.attn_kernel_regularizer,
+                                    constraint=self.attn_kernel_constraint,
+                                    name="attn_kernel_{}".format(head))
+
+            self.neighbor_kernels.append(neighbor_kernel)
+            self.attn_kernels.append(attn_kernel)
+
+            if self.use_bias:
+                biases = []
+                for kind in ["self", "neigbor"]:
+                    name = "bias_attn_{}_{}".format(kind, head)
+                    bias = self.add_weight(shape=(N,),
+                                           initializer=self.bias_initializer,
+                                           regularizer=self.bias_regularizer,
+                                           constraint=self.bias_constraint,
+                                           name=name)
+                    biases.append(bias)
+                self.attention_biases.append(biases)
 
         self.built = True
 
     def call(self, inputs):
         X = inputs[0]  # Node features (N x F)
         A = inputs[1]  # Adjacency matrix (N x N)
+        X_dims, A_dims = [t.get_shape().as_list() for t in inputs]
+        _, F = X_dims
+        _, N = A_dims
 
         outputs = []
+        attentions = []
         for head in range(self.attn_heads):
-            kernel = self.kernels[head]  # W in the paper (F x F")
-            attention_kernel = self.attn_kernels[head]  # Attention kernel a in the paper (2F" x 1)
+            # W in the paper (F x F")
+            kernel = self.kernels[head]
 
             # Compute inputs to attention network
-<<<<<<< HEAD
             features = K.dot(X, kernel)  # (N x F")
-=======
-            features = K.dot(X, kernel)  # (N x F')
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
-
-            # Compute feature combinations
-            # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]] = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
-            attn_for_self = K.dot(features, attention_kernel[0])    # (N x 1), [a_1]^T [Wh_i]
-            attn_for_neighs = K.dot(features, attention_kernel[1])  # (N x 1), [a_2]^T [Wh_j]
-
-            # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
-            dense = attn_for_self + K.transpose(attn_for_neighs)  # (N x N) via broadcasting
-
-            # Add nonlinearty
-            dense = LeakyReLU(alpha=0.2)(dense)
-
-            # Mask values before activation (Vaswani et al., 2017)
-            mask = -10e9 * (1.0 - A)
-            dense += mask
-
-            # Apply softmax to get attention coefficients
-            dense = K.softmax(dense)  # (N x N)
-<<<<<<< HEAD
-
-            # Apply dropout to features and attention coefficients
-            dropout_attn = Dropout(self.dropout_rate)(dense)  # (N x N)
             dropout_feat = Dropout(self.dropout_rate)(features)  # (N x F")
 
-            # Linear combination with neighbors" features
-            node_features = K.dot(dropout_attn, dropout_feat)  # (N x F")
+            if not self.attention:
+                attention = A
+                node_features = K.dot(attention, dropout_feat)  # (N x F")
+            else:
+                # Attention kernel a in the paper (2F" x 1)
+                neighbor_kernel = self.neighbor_kernels[head]
+                attn_kernel = self.attn_kernels[head]
+
+                neighbor_features = K.dot(X, neighbor_kernel)
+
+                attn_self = K.dot(features, attn_kernel)
+                attn_neighbor = K.dot(neighbor_features, attn_kernel)
+
+                if self.use_bias:
+                    self_attn_bias, neigbor_attn_bias = self.attention_biases[head]
+                    attn_self = K.bias_add(K.reshape(attn_self, (-1, N)),
+                                           self_attn_bias)
+                    attn_neighbor = K.bias_add(K.reshape(attn_neighbor, (-1, N)),
+                                               neigbor_attn_bias)
+
+                attention = attn_neighbor + tf.transpose(attn_self)
+                attention = tf.nn.tanh(attention)
+                attention = K.reshape(attention, (N, N))
+                mask = -10e9 * (1.0 - A)
+                attention += mask
+
+                attention = tf.nn.softmax(attention)
+                dropout_attn = Dropout(self.dropout_rate)(attention)
+
+                node_features = K.dot(dropout_attn, dropout_feat)
 
             if self.use_bias:
                 node_features = K.bias_add(node_features, self.biases[head])
 
-            if self.attn_heads_reduction == "concat":
-                # If "concat", compute the activation here (Eq. 5)
-                node_features = self.activation(node_features)
-=======
-
-            # Apply dropout to features and attention coefficients
-            dropout_attn = Dropout(self.dropout_rate)(dense)  # (N x N)
-            dropout_feat = Dropout(self.dropout_rate)(features)  # (N x F')
-
-            # Linear combination with neighbors' features
-            node_features = K.dot(dropout_attn, dropout_feat)  # (N x F')
-
-            if self.use_bias:
-                node_features = K.bias_add(node_features, self.biases[head])
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
-
+            if self.return_attention:
+                attentions.append(attention)
             # Add output of attention head to final output
             outputs.append(node_features)
 
-<<<<<<< HEAD
         # Aggregate the heads" output according to the reduction method
         if self.attn_heads_reduction == "concat":
-            output = K.concatenate(outputs)  # (N x KF")
+            output = K.concatenate(outputs, axis=-1)  # (N x KF")
         else:
-            output = K.mean(K.stack(outputs), axis=0)  # N x F")
+            output = K.mean(K.stack(outputs), axis=0)  # (N x F")
             # If "average", compute the activation here (Eq. 6)
-            output = self.activation(output)
-=======
-        # Aggregate the heads' output according to the reduction method
-        if self.attn_heads_reduction == 'concat':
-            output = K.concatenate(outputs)  # (N x KF')
-        else:
-            output = K.mean(K.stack(outputs), axis=0)  # N x F')
->>>>>>> 96916cf4d8dfaa05412e10b11bef9ee4e265d817
 
         output = self.activation(output)
-        return output
+
+        if self.return_attention:
+            attentions = K.stack(attentions, axis=1)
+            return (output, attentions)
+        else:
+            return output
 
     def compute_output_shape(self, input_shape):
-        output_shape = input_shape[0][0].value, self.output_dim
-        return tf.TensorShape(output_shape)
+        X_dims, A_dims = [dims.as_list() for dims in input_shape]
+        assert len(X_dims) == 2
+        assert len(A_dims) == 2
+        output_shape = X_dims[0], self.output_dim
+
+        if self.return_attention:
+            return (tf.TensorShape(output_shape),
+                    tf.TensorShape(A_dims.insert(1, self.attn_heads)))
+        else:
+            return tf.TensorShape(output_shape)
